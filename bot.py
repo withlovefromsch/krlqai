@@ -453,7 +453,7 @@ async def client_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await list_appointments_for_cancel(update, context)
         return ConversationHandler.END
     elif text == "ℹ️ Помощь":
-        await update.message.reply_text("Я помогаю записаться на груминг.\nВы можете записаться, посмотреть свои активные записи или отменить их.")
+        await update.message.reply_text("Я помогаю записаться на груминг.\nВы можете записаться, посмотреть свои активные записи или отменить их. \n Бот создан пользователем @Withlovefromsch")
     return ConversationHandler.END
 
 
