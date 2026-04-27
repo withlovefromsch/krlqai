@@ -48,17 +48,14 @@ ADMIN_CANCEL_APPOINTMENT = 50
 def init_db():
     conn = sqlite3.connect("grooming.db")
     cur = conn.cursor()
-
-    # Проверяем, есть ли колонка comment в таблице appointments, если нет - добавляем
-    cur.execute("PRAGMA table_info(appointments)")
-    columns = [col[1] for col in cur.fetchall()]
-    if "comment" not in columns:
-        cur.execute("ALTER TABLE appointments ADD COLUMN comment TEXT DEFAULT ''")
-
+    
+    # Создаём таблицу services
     cur.execute('''CREATE TABLE IF NOT EXISTS services (
         id INTEGER PRIMARY KEY,
         name TEXT UNIQUE
     )''')
+    
+    # Создаём таблицу slots
     cur.execute('''CREATE TABLE IF NOT EXISTS slots (
         id INTEGER PRIMARY KEY,
         date TEXT,
@@ -66,6 +63,8 @@ def init_db():
         end_time TEXT,
         UNIQUE(date, start_time, end_time)
     )''')
+    
+    # Создаём таблицу appointments (сразу с полем comment)
     cur.execute('''CREATE TABLE IF NOT EXISTS appointments (
         id INTEGER PRIMARY KEY,
         user_id INTEGER,
@@ -83,13 +82,13 @@ def init_db():
         slot_id INTEGER,
         comment TEXT DEFAULT ''
     )''')
-
+    
     # Обновляем услуги
     cur.execute("DELETE FROM services")
     services = ["🛁 Купание", "✨ Комплексный уход", "📝 Уход по запросу"]
     for s in services:
         cur.execute("INSERT INTO services (name) VALUES (?)", (s,))
-
+    
     conn.commit()
     conn.close()
 
@@ -114,9 +113,7 @@ def get_free_slots(date_str):
     """Получает свободные слоты на дату"""
     conn = sqlite3.connect("grooming.db")
     cur = conn.cursor()
-    cur.execute(
-        "SELECT start_time, end_time, id FROM slots WHERE date=? AND id NOT IN (SELECT slot_id FROM appointments WHERE status IN ('pending','confirmed') AND date=?)",
-        (date_str, date_str))
+    cur.execute("SELECT start_time, end_time, id FROM slots WHERE date=? AND id NOT IN (SELECT slot_id FROM appointments WHERE status IN ('pending','confirmed') AND date=?)", (date_str, date_str))
     rows = cur.fetchall()
     conn.close()
     return [(r[0], r[1], r[2]) for r in rows]
@@ -136,8 +133,7 @@ def get_available_dates():
     """Возвращает даты, на которых есть свободные слоты"""
     conn = sqlite3.connect("grooming.db")
     cur = conn.cursor()
-    cur.execute(
-        "SELECT DISTINCT date FROM slots WHERE id NOT IN (SELECT slot_id FROM appointments WHERE status IN ('pending','confirmed'))")
+    cur.execute("SELECT DISTINCT date FROM slots WHERE id NOT IN (SELECT slot_id FROM appointments WHERE status IN ('pending','confirmed'))")
     rows = cur.fetchall()
     conn.close()
     return [r[0] for r in rows]
@@ -175,16 +171,14 @@ def add_slots(date_str, intervals):
     return added, existed
 
 
-def create_appointment(user_id, username, service, date_str, start_time, end_time, phone, pet_name, breed, slot_id,
-                       comment=""):
+def create_appointment(user_id, username, service, date_str, start_time, end_time, phone, pet_name, breed, slot_id, comment=""):
     """Создаёт новую запись, привязанную к конкретному слоту"""
     conn = sqlite3.connect("grooming.db")
     cur = conn.cursor()
     cur.execute('''INSERT INTO appointments 
         (user_id, username, service, date, start_time, end_time, phone, pet_name, breed, status, slot_id, comment)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
-                (user_id, username, service, date_str, start_time, end_time, phone, pet_name, breed, "pending", slot_id,
-                 comment))
+        (user_id, username, service, date_str, start_time, end_time, phone, pet_name, breed, "pending", slot_id, comment))
     app_id = cur.lastrowid
     conn.commit()
     conn.close()
@@ -204,9 +198,7 @@ def cancel_appointment_by_admin(app_id):
     conn = sqlite3.connect("grooming.db")
     cur = conn.cursor()
     # Получаем данные записи перед удалением
-    cur.execute(
-        "SELECT user_id, pet_name, slot_id, date, service, start_time, end_time, phone, comment FROM appointments WHERE id=?",
-        (app_id,))
+    cur.execute("SELECT user_id, pet_name, slot_id, date, service, start_time, end_time, phone, comment FROM appointments WHERE id=?", (app_id,))
     row = cur.fetchone()
     if row:
         user_id, pet_name, slot_id, date_str, service, start_time, end_time, phone, comment = row
@@ -251,7 +243,7 @@ def get_all_appointments_next_week():
     cur = conn.cursor()
     cur.execute('''SELECT id, user_id, username, service, date, start_time, end_time, phone, pet_name, breed, price, status, comment
                   FROM appointments WHERE date BETWEEN ? AND ? ORDER BY date, start_time''',
-                (today.isoformat(), end.isoformat()))
+                  (today.isoformat(), end.isoformat()))
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -264,12 +256,12 @@ def get_appointments_by_month(year, month):
         end_date = date(year + 1, 1, 1) - timedelta(days=1)
     else:
         end_date = date(year, month + 1, 1) - timedelta(days=1)
-
+    
     conn = sqlite3.connect("grooming.db")
     cur = conn.cursor()
     cur.execute('''SELECT id, user_id, username, service, date, start_time, end_time, phone, pet_name, breed, price, status, comment
                   FROM appointments WHERE date BETWEEN ? AND ? ORDER BY date, start_time''',
-                (start_date.isoformat(), end_date.isoformat()))
+                  (start_date.isoformat(), end_date.isoformat()))
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -299,9 +291,7 @@ def get_financial_summary(start_date, end_date):
 def get_appointment_by_id(app_id):
     conn = sqlite3.connect("grooming.db")
     cur = conn.cursor()
-    cur.execute(
-        "SELECT user_id, service, date, start_time, end_time, pet_name, breed, phone, price, status, comment FROM appointments WHERE id=?",
-        (app_id,))
+    cur.execute("SELECT user_id, service, date, start_time, end_time, pet_name, breed, phone, price, status, comment FROM appointments WHERE id=?", (app_id,))
     row = cur.fetchone()
     conn.close()
     return row
@@ -312,41 +302,41 @@ def build_calendar_for_client(year, month, prefix="client_date"):
     month_names = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"]
     first_day_weekday, days_in_month = monthrange(year, month)
     available_dates = get_available_dates()
-
+    
     keyboard = []
-    row = [InlineKeyboardButton(f"📅 {month_names[month - 1]} {year}", callback_data=f"{prefix}_ignore")]
+    row = [InlineKeyboardButton(f"📅 {month_names[month-1]} {year}", callback_data=f"{prefix}_ignore")]
     row.append(InlineKeyboardButton("◀️", callback_data=f"{prefix}_prev_{year}_{month}"))
     row.append(InlineKeyboardButton("▶️", callback_data=f"{prefix}_next_{year}_{month}"))
     keyboard.append(row)
-
+    
     week_days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
     keyboard.append([InlineKeyboardButton(day, callback_data=f"{prefix}_ignore") for day in week_days])
-
+    
     days_row = []
     for i in range(first_day_weekday):
         days_row.append(InlineKeyboardButton(" ", callback_data=f"{prefix}_ignore"))
-
+    
     today_date = date.today()
-
+    
     for day in range(1, days_in_month + 1):
         current_date = date(year, month, day)
         date_str = current_date.isoformat()
         is_available = date_str in available_dates and current_date >= today_date
-
+        
         if is_available:
             days_row.append(InlineKeyboardButton(str(day), callback_data=f"{prefix}_day_{year}_{month}_{day}"))
         else:
             days_row.append(InlineKeyboardButton(f"❌{day}", callback_data=f"{prefix}_unavailable"))
-
+        
         if len(days_row) == 7:
             keyboard.append(days_row)
             days_row = []
-
+    
     if days_row:
         while len(days_row) < 7:
             days_row.append(InlineKeyboardButton(" ", callback_data=f"{prefix}_ignore"))
         keyboard.append(days_row)
-
+    
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data=f"{prefix}_cancel")])
     return InlineKeyboardMarkup(keyboard)
 
@@ -355,7 +345,7 @@ def build_calendar_for_admin(year, month, prefix="admin_date"):
     month_names = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"]
     first_day_weekday, days_in_month = monthrange(year, month)
     keyboard = []
-    row = [InlineKeyboardButton(f"📅 {month_names[month - 1]} {year}", callback_data=f"{prefix}_ignore")]
+    row = [InlineKeyboardButton(f"📅 {month_names[month-1]} {year}", callback_data=f"{prefix}_ignore")]
     row.append(InlineKeyboardButton("◀️", callback_data=f"{prefix}_prev_{year}_{month}"))
     row.append(InlineKeyboardButton("▶️", callback_data=f"{prefix}_next_{year}_{month}"))
     keyboard.append(row)
@@ -364,7 +354,7 @@ def build_calendar_for_admin(year, month, prefix="admin_date"):
     days_row = []
     for i in range(first_day_weekday):
         days_row.append(InlineKeyboardButton(" ", callback_data=f"{prefix}_ignore"))
-    for day in range(1, days_in_month + 1):
+    for day in range(1, days_in_month+1):
         days_row.append(InlineKeyboardButton(str(day), callback_data=f"{prefix}_day_{year}_{month}_{day}"))
         if len(days_row) == 7:
             keyboard.append(days_row)
@@ -384,7 +374,7 @@ def build_month_selection_keyboard(year, month, prefix="month_select"):
     row.append(InlineKeyboardButton("◀️", callback_data=f"{prefix}_prev_year_{year}"))
     row.append(InlineKeyboardButton("▶️", callback_data=f"{prefix}_next_year_{year}"))
     keyboard.append(row)
-
+    
     months_row = []
     for i, month_name in enumerate(month_names, 1):
         months_row.append(InlineKeyboardButton(month_name, callback_data=f"{prefix}_month_{year}_{i}"))
@@ -393,7 +383,7 @@ def build_month_selection_keyboard(year, month, prefix="month_select"):
             months_row = []
     if months_row:
         keyboard.append(months_row)
-
+    
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data=f"{prefix}_cancel")])
     return InlineKeyboardMarkup(keyboard)
 
@@ -423,8 +413,7 @@ async def show_month_selector(update, context, prefix="month_select"):
     year, month = now.year, now.month
     reply_markup = build_month_selection_keyboard(year, month, prefix)
     if update.callback_query:
-        await update.callback_query.edit_message_text("📅 Выберите месяц для просмотра записей:",
-                                                      reply_markup=reply_markup)
+        await update.callback_query.edit_message_text("📅 Выберите месяц для просмотра записей:", reply_markup=reply_markup)
     else:
         await update.message.reply_text("📅 Выберите месяц для просмотра записей:", reply_markup=reply_markup)
 
@@ -464,8 +453,7 @@ async def client_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await list_appointments_for_cancel(update, context)
         return ConversationHandler.END
     elif text == "ℹ️ Помощь":
-        await update.message.reply_text(
-            "Я помогаю записаться на груминг.\nВы можете записаться, посмотреть свои активные записи или отменить их.\nБот создан пользователем @Withlovefromsch")
+        await update.message.reply_text("Я помогаю записаться на груминг.\nВы можете записаться, посмотреть свои активные записи или отменить их.")
     return ConversationHandler.END
 
 
@@ -474,7 +462,7 @@ async def service_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     service = query.data.split("_", 1)[1]
     context.user_data["service"] = service
-
+    
     # Если выбрана услуга "Уход по запросу", запрашиваем комментарий
     if service == "📝 Уход по запросу":
         await query.edit_message_text(
@@ -505,54 +493,53 @@ async def client_date_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     data = query.data
     await query.answer()
     prefix = "client_date"
-
+    
     if data == f"{prefix}_cancel":
         await query.edit_message_text("❌ Запись отменена.")
         return ConversationHandler.END
-
+    
     if data == f"{prefix}_unavailable":
         await query.answer("❌ На эту дату нет свободных окон для записи!", show_alert=True)
         return CLIENT_DATE
-
+    
     parts = data.split('_')
-
+    
     if len(parts) >= 5 and parts[2] == "day":
         try:
             year = int(parts[3])
             month = int(parts[4])
             day = int(parts[5])
             selected_date = date(year, month, day)
-
+            
             if selected_date < date.today():
                 await query.answer("❌ Нельзя выбрать прошедшую дату!", show_alert=True)
                 return CLIENT_DATE
-
+            
             free_slots = get_free_slots(selected_date.isoformat())
             if not free_slots:
                 await query.answer("❌ На эту дату нет свободных интервалов!", show_alert=True)
                 await show_calendar_for_client(update, context, prefix)
                 return CLIENT_DATE
-
+            
             context.user_data["appointment_date"] = selected_date.isoformat()
             keyboard = []
             for start, end, slot_id in free_slots:
-                keyboard.append(
-                    [InlineKeyboardButton(f"{start} - {end}", callback_data=f"slot_{slot_id}_{start}_{end}")])
+                keyboard.append([InlineKeyboardButton(f"{start} - {end}", callback_data=f"slot_{slot_id}_{start}_{end}")])
             keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_date")])
             await query.edit_message_text("✅ Выберите время:", reply_markup=InlineKeyboardMarkup(keyboard))
             return CLIENT_TIME
-
+            
         except (IndexError, ValueError) as e:
             print(f"Ошибка: {e}")
             await query.edit_message_text("❌ Ошибка при выборе даты. Попробуйте снова.")
             await show_calendar_for_client(update, context, prefix)
             return CLIENT_DATE
-
+    
     elif len(parts) >= 5 and (data.startswith(f"{prefix}_prev") or data.startswith(f"{prefix}_next")):
         try:
             year = int(parts[3])
             month = int(parts[4])
-
+            
             if data.startswith(f"{prefix}_prev"):
                 month -= 1
                 if month < 1:
@@ -563,14 +550,14 @@ async def client_date_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 if month > 12:
                     month = 1
                     year += 1
-
+            
             reply_markup = build_calendar_for_client(year, month, prefix)
             await query.edit_message_text("📅 Выберите доступную дату:", reply_markup=reply_markup)
             return CLIENT_DATE
         except (IndexError, ValueError):
             await query.edit_message_text("❌ Ошибка при перелистывании календаря.")
             return CLIENT_DATE
-
+    
     return CLIENT_DATE
 
 
@@ -578,18 +565,18 @@ async def client_time_selection(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     data = query.data
-
+    
     if data == "back_to_date":
         await show_calendar_for_client(update, context, prefix="client_date")
         return CLIENT_DATE
-
+    
     if data.startswith("slot_"):
         try:
             _, slot_id, start_time, end_time = data.split("_", 3)
             context.user_data["slot_id"] = int(slot_id)
             context.user_data["start_time"] = start_time
             context.user_data["end_time"] = end_time
-
+            
             contact_keyboard = ReplyKeyboardMarkup(
                 [[KeyboardButton("📱 Отправить номер телефона", request_contact=True)]],
                 resize_keyboard=True, one_time_keyboard=True
@@ -601,7 +588,7 @@ async def client_time_selection(update: Update, context: ContextTypes.DEFAULT_TY
             print(f"Ошибка: {e}")
             await query.edit_message_text("❌ Ошибка при выборе времени. Попробуйте снова.")
             return CLIENT_DATE
-
+    
     return CLIENT_TIME
 
 
@@ -610,7 +597,7 @@ async def client_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         phone = update.message.contact.phone_number
     else:
         phone = update.message.text
-
+    
     context.user_data["phone"] = phone
     await update.message.reply_text("🐕 Введите кличку питомца:")
     return CLIENT_PET_NAME
@@ -625,10 +612,10 @@ async def client_pet_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def client_breed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["breed"] = update.message.text
     user = update.effective_user
-
+    
     # Получаем комментарий, если он есть (для услуги "Уход по запросу")
     comment = context.user_data.get("comment", "")
-
+    
     app_id = create_appointment(
         user.id,
         user.username or user.first_name,
@@ -642,7 +629,7 @@ async def client_breed(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["slot_id"],
         comment
     )
-
+    
     await notify_all_admins_new_appointment(context.bot, app_id)
     await update.message.reply_text(
         "✅ Заявка отправлена администратору!\nВы получите уведомление о подтверждении.",
@@ -657,22 +644,22 @@ async def notify_all_admins_new_appointment(bot, app_id):
         return
     user_id, service, date_str, start, end, pet_name, breed, phone, price, status, comment = data
     formatted_date = format_date(date_str)
-
+    
     text = (f"🆕 НОВАЯ ЗАЯВКА #{app_id}\n\n"
             f"🐕 Питомец: {pet_name} ({breed})\n"
             f"✂️ Услуга: {service}\n"
             f"📅 Дата: {formatted_date}\n"
             f"⏰ Время: {start} - {end}\n"
             f"📞 Телефон: {phone}")
-
+    
     if comment:
         text += f"\n📝 Комментарий: {comment}"
-
+    
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ ПОДТВЕРДИТЬ", callback_data=f"confirm_{app_id}"),
          InlineKeyboardButton("❌ ОТКЛОНИТЬ", callback_data=f"reject_{app_id}")]
     ])
-
+    
     for admin_id in ALL_ADMINS:
         try:
             await bot.send_message(chat_id=admin_id, text=text, reply_markup=keyboard)
@@ -684,19 +671,19 @@ async def show_my_appointments(update: Update, context: ContextTypes.DEFAULT_TYP
     """Показывает активные записи клиента - БЕЗ телефона"""
     user_id = update.effective_user.id
     apps = get_user_active_appointments(user_id)
-
+    
     if not apps:
         await update.message.reply_text("📭 У вас нет активных записей.")
         return
-
+    
     text = "📋 **ВАШИ АКТИВНЫЕ ЗАПИСИ:**\n\n"
     for app in apps:
         app_id, service, date_str, start, end, status, price, pet_name, breed, comment = app
         formatted_date = format_date(date_str)
-
+        
         status_emoji = "⏳" if status == "pending" else "✅"
         status_text = "ожидает подтверждения" if status == "pending" else "подтверждена"
-
+        
         text += f"{status_emoji} **Запись #{app_id}**\n"
         text += f"   🐕 Питомец: {pet_name} ({breed})\n"
         text += f"   ✂️ Услуга: {service}\n"
@@ -708,7 +695,7 @@ async def show_my_appointments(update: Update, context: ContextTypes.DEFAULT_TYP
         if status == "confirmed" and price > 0:
             text += f"   💰 Стоимость: {price} руб.\n"
         text += "\n"
-
+    
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
@@ -722,8 +709,7 @@ async def list_appointments_for_cancel(update: Update, context: ContextTypes.DEF
     for app in apps:
         app_id, service, date_str, start, end, status, price, pet_name, breed, comment = app
         formatted_date = format_date(date_str)
-        keyboard.append([InlineKeyboardButton(f"{pet_name} - {service} ({formatted_date} {start})",
-                                              callback_data=f"cancel_{app_id}")])
+        keyboard.append([InlineKeyboardButton(f"{pet_name} - {service} ({formatted_date} {start})", callback_data=f"cancel_{app_id}")])
     await update.message.reply_text("🔍 Выберите запись для отмены:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
@@ -732,13 +718,12 @@ async def cancel_appointment_callback(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     await query.answer()
     app_id = int(query.data.split("_")[1])
-
+    
     # Отменяем запись
-    user_id, pet_name, slot_id, date_str, service, start_time, end_time, phone, comment = cancel_appointment_by_admin(
-        app_id)
-
+    user_id, pet_name, slot_id, date_str, service, start_time, end_time, phone, comment = cancel_appointment_by_admin(app_id)
+    
     await query.edit_message_text("✅ Запись отменена. Слот освобождён.")
-
+    
     # Уведомляем всех админов
     for admin_id in ALL_ADMINS:
         try:
@@ -749,7 +734,7 @@ async def cancel_appointment_callback(update: Update, context: ContextTypes.DEFA
 
 # ---------- АДМИН ----------
 admin_keyboard = ReplyKeyboardMarkup(
-    [["➕ Добавить дату", "📅 Записи на неделю"],
+    [["➕ Добавить дату", "📅 Записи на неделю"], 
      ["📆 Записи на месяц", "💰 Аналитика"],
      ["❌ Отменить запись"]],
     resize_keyboard=True
@@ -761,7 +746,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(user_id):
         await update.message.reply_text("⛔ У вас нет прав администратора.")
         return
-
+    
     await update.message.reply_text(
         "👑 **ПАНЕЛЬ АДМИНИСТРАТОРА**\n\nВыберите действие:",
         reply_markup=admin_keyboard,
@@ -771,11 +756,11 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-
+    
     if text == "➕ Добавить дату":
         await show_calendar_for_admin(update, context, prefix="admin_date")
         return ADMIN_ADD_DATE
-
+    
     elif text == "📅 Записи на неделю":
         rows = get_all_appointments_next_week()
         if not rows:
@@ -785,7 +770,7 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             for row in rows:
                 app_id, user_id, username, service, date_str, start, end, phone, pet_name, breed, price, status, comment = row
                 formatted_date = format_date(date_str)
-
+                
                 status_emoji = "⏳" if status == "pending" else "✅" if status == "confirmed" else "❌"
                 status_text = "ожидает" if status == "pending" else "подтверждена" if status == "confirmed" else "отменена"
                 week_text += f"{status_emoji} **#{app_id}**\n"
@@ -801,40 +786,40 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 week_text += f"   👤 @{username if username else 'нет'}\n\n"
             await update.message.reply_text(week_text, parse_mode="Markdown")
         return ConversationHandler.END
-
+    
     elif text == "📆 Записи на месяц":
         await show_month_selector(update, context, prefix="month_select")
         return ADMIN_MONTH_SELECT
-
+    
     elif text == "💰 Аналитика":
         await show_calendar_for_admin(update, context, prefix="analytics_start")
         return ADMIN_ANALYTICS_START
-
+    
     elif text == "❌ Отменить запись":
         await show_all_appointments_for_admin_cancel(update, context)
         return ADMIN_CANCEL_APPOINTMENT
-
+    
     return ConversationHandler.END
 
 
 async def show_all_appointments_for_admin_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает все активные записи для отмены админом"""
     rows = get_all_appointments()
-
+    
     if not rows:
         await update.message.reply_text("📭 Нет активных записей для отмены.")
         return ConversationHandler.END
-
+    
     # Формируем сообщение со списком записей
     text = "📋 **ВСЕ АКТИВНЫЕ ЗАПИСИ:**\n\n"
     keyboard = []
-
+    
     for row in rows:
         app_id, user_id, username, service, date_str, start, end, phone, pet_name, breed, price, status, comment = row
         formatted_date = format_date(date_str)
         status_emoji = "⏳" if status == "pending" else "✅"
         status_text = "ожидает" if status == "pending" else "подтверждена"
-
+        
         text += f"{status_emoji} **#{app_id}**\n"
         text += f"   🐕 {pet_name} ({breed})\n"
         text += f"   📅 {formatted_date} {start}-{end}\n"
@@ -844,12 +829,11 @@ async def show_all_appointments_for_admin_cancel(update: Update, context: Contex
         text += f"   📞 {phone}\n"
         text += f"   📌 {status_text}\n"
         text += f"   👤 @{username if username else 'нет'}\n\n"
-
-        keyboard.append([InlineKeyboardButton(f"❌ Отменить #{app_id} - {pet_name} ({formatted_date} {start})",
-                                              callback_data=f"admin_cancel_{app_id}")])
-
+        
+        keyboard.append([InlineKeyboardButton(f"❌ Отменить #{app_id} - {pet_name} ({formatted_date} {start})", callback_data=f"admin_cancel_{app_id}")])
+    
     keyboard.append([InlineKeyboardButton("🔙 Назад в меню", callback_data="admin_cancel_back")])
-
+    
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
     return ADMIN_CANCEL_APPOINTMENT
 
@@ -859,22 +843,21 @@ async def admin_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     data = query.data
     await query.answer()
-
+    
     if data == "admin_cancel_back":
         # Возвращаемся в админ-панель
         await admin_panel(update, context)
         return ConversationHandler.END
-
+    
     if data.startswith("admin_cancel_"):
         app_id = int(data.split("_")[2])
-
+        
         # Получаем данные записи перед отменой
-        user_id, pet_name, slot_id, date_str, service, start_time, end_time, phone, comment = cancel_appointment_by_admin(
-            app_id)
-
+        user_id, pet_name, slot_id, date_str, service, start_time, end_time, phone, comment = cancel_appointment_by_admin(app_id)
+        
         if user_id:
             formatted_date = format_date(date_str)
-
+            
             # Уведомляем клиента
             try:
                 msg = (f"❌ **Ваша запись отменена администратором!**\n\n"
@@ -885,26 +868,24 @@ async def admin_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 if comment:
                     msg += f"\n📝 Комментарий: {comment}"
                 msg += f"\n\nСлот освобождён. Вы можете записаться на другое время."
-
+                
                 await context.bot.send_message(user_id, msg, parse_mode="Markdown")
             except Exception as e:
                 print(f"Не удалось уведомить клиента: {e}")
-
+            
             # Уведомляем всех админов
             for admin_id in ALL_ADMINS:
                 try:
-                    await context.bot.send_message(admin_id,
-                                                   f"✅ Администратор отменил запись #{app_id} (питомец: {pet_name})")
+                    await context.bot.send_message(admin_id, f"✅ Администратор отменил запись #{app_id} (питомец: {pet_name})")
                 except:
                     pass
-
-            await query.edit_message_text(
-                f"✅ Запись #{app_id} для питомца {pet_name} успешно отменена. Слот освобождён.\n\nИспользуйте /admin для продолжения.")
+            
+            await query.edit_message_text(f"✅ Запись #{app_id} для питомца {pet_name} успешно отменена. Слот освобождён.\n\nИспользуйте /admin для продолжения.")
         else:
             await query.edit_message_text("❌ Ошибка при отмене записи.")
-
+        
         return ConversationHandler.END
-
+    
     return ADMIN_CANCEL_APPOINTMENT
 
 
@@ -913,31 +894,31 @@ async def admin_date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     data = query.data
     await query.answer()
     prefix = "admin_date"
-
+    
     if data == f"{prefix}_cancel":
         await query.edit_message_text("❌ Добавление даты отменено.")
         return ConversationHandler.END
-
+    
     parts = data.split('_')
-
+    
     if len(parts) >= 5 and parts[2] == "day":
         try:
             year = int(parts[3])
             month = int(parts[4])
             day = int(parts[5])
             selected_date = date(year, month, day)
-
+            
             if selected_date < date.today():
                 await query.edit_message_text("❌ Нельзя добавить прошедшую дату.")
                 await show_calendar_for_admin(update, context, prefix)
                 return ADMIN_ADD_DATE
-
+            
             # Получаем существующие интервалы на эту дату
             existing_slots = get_all_slots(selected_date.isoformat())
             context.user_data["admin_selected_date"] = selected_date.isoformat()
-
+            
             message = f"✅ Дата {format_date(selected_date.isoformat())} выбрана!\n\n"
-
+            
             if existing_slots:
                 message += "📋 **Существующие интервалы:**\n"
                 # Проверяем, какие слоты свободны, а какие заняты
@@ -945,11 +926,10 @@ async def admin_date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                     # Проверяем, есть ли активная запись на этот слот
                     conn = sqlite3.connect("grooming.db")
                     cur = conn.cursor()
-                    cur.execute("SELECT id FROM appointments WHERE slot_id=? AND status IN ('pending','confirmed')",
-                                (slot_id,))
+                    cur.execute("SELECT id FROM appointments WHERE slot_id=? AND status IN ('pending','confirmed')", (slot_id,))
                     appointment = cur.fetchone()
                     conn.close()
-
+                    
                     if appointment:
                         message += f"   🔴 {start} - {end} (ЗАНЯТ)\n"
                     else:
@@ -957,18 +937,18 @@ async def admin_date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 message += "\n"
             else:
                 message += "📋 На эту дату пока нет интервалов.\n\n"
-
+            
             message += "⌨️ **Введите новые интервалы** (10:00-11:00, 12:00-13:00):\n"
             message += "Интервалы, которые уже есть, не будут продублированы."
-
+            
             await query.edit_message_text(message, parse_mode="Markdown")
             return ADMIN_ADD_SLOTS
-
+            
         except (IndexError, ValueError):
             await query.edit_message_text("❌ Ошибка при выборе даты.")
             await show_calendar_for_admin(update, context, prefix)
             return ADMIN_ADD_DATE
-
+    
     elif len(parts) >= 5 and (data.startswith(f"{prefix}_prev") or data.startswith(f"{prefix}_next")):
         try:
             year = int(parts[3])
@@ -989,7 +969,7 @@ async def admin_date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         except:
             await query.edit_message_text("❌ Ошибка при перелистывании.")
             return ConversationHandler.END
-
+    
     return ADMIN_ADD_DATE
 
 
@@ -1008,33 +988,33 @@ async def admin_add_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             valid = False
             break
-
+    
     if not valid:
         await update.message.reply_text("❌ Неверный формат! Пример: 10:00-11:00, 12:00-13:00")
         return ADMIN_ADD_SLOTS
-
+    
     date_str = context.user_data["admin_selected_date"]
     added, existed = add_slots(date_str, intervals)
-
+    
     result_message = f"📅 **Дата:** {format_date(date_str)}\n\n"
-
+    
     if added:
         result_message += "✅ **Добавлены интервалы:**\n"
         for interval in added:
             result_message += f"   • {interval}\n"
         result_message += "\n"
-
+    
     if existed:
         result_message += "⚠️ **Уже существовали (не добавлены):**\n"
         for interval in existed:
             result_message += f"   • {interval}\n"
         result_message += "\n"
-
+    
     if not added and not existed:
         result_message += "❌ Не добавлено ни одного интервала.\n"
-
+    
     result_message += "Используйте /admin для продолжения."
-
+    
     await update.message.reply_text(result_message, parse_mode="Markdown")
     return ConversationHandler.END
 
@@ -1048,13 +1028,13 @@ async def analytics_start_callback(update: Update, context: ContextTypes.DEFAULT
     data = query.data
     await query.answer()
     prefix = "analytics_start"
-
+    
     if data == f"{prefix}_cancel":
         await query.edit_message_text("❌ Аналитика отменена.")
         return ConversationHandler.END
-
+    
     parts = data.split('_')
-
+    
     if len(parts) >= 5 and parts[2] == "day":
         try:
             year = int(parts[3])
@@ -1067,7 +1047,7 @@ async def analytics_start_callback(update: Update, context: ContextTypes.DEFAULT
         except:
             await query.edit_message_text("❌ Ошибка.")
             return ConversationHandler.END
-
+    
     elif len(parts) >= 5 and (data.startswith(f"{prefix}_prev") or data.startswith(f"{prefix}_next")):
         try:
             year = int(parts[3])
@@ -1088,7 +1068,7 @@ async def analytics_start_callback(update: Update, context: ContextTypes.DEFAULT
         except:
             await query.edit_message_text("❌ Ошибка.")
             return ConversationHandler.END
-
+    
     return ADMIN_ANALYTICS_START
 
 
@@ -1097,13 +1077,13 @@ async def analytics_end_callback(update: Update, context: ContextTypes.DEFAULT_T
     data = query.data
     await query.answer()
     prefix = "analytics_end"
-
+    
     if data == f"{prefix}_cancel":
         await query.edit_message_text("❌ Аналитика отменена.")
         return ConversationHandler.END
-
+    
     parts = data.split('_')
-
+    
     if len(parts) >= 5 and parts[2] == "day":
         try:
             year = int(parts[3])
@@ -1111,25 +1091,25 @@ async def analytics_end_callback(update: Update, context: ContextTypes.DEFAULT_T
             day = int(parts[5])
             end_date = date(year, month, day)
             start_date = context.user_data.get("analytics_start")
-
+            
             if not start_date:
                 await query.edit_message_text("❌ Ошибка: начальная дата не выбрана.")
                 return ConversationHandler.END
-
+            
             if end_date < start_date:
                 await query.edit_message_text("❌ Конечная дата не может быть раньше начальной.")
                 await show_calendar_for_admin(update, context, prefix="analytics_end")
                 return ADMIN_ANALYTICS_END
-
+            
             total = get_financial_summary(start_date, end_date)
             await query.edit_message_text(f"💰 **ФИНАНСОВАЯ АНАЛИТИКА**\n\n"
-                                          f"📅 Период: {format_date(start_date.isoformat())} – {format_date(end_date.isoformat())}\n"
-                                          f"💵 Общая выручка: {total} руб.", parse_mode="Markdown")
+                                         f"📅 Период: {format_date(start_date.isoformat())} – {format_date(end_date.isoformat())}\n"
+                                         f"💵 Общая выручка: {total} руб.", parse_mode="Markdown")
             return ConversationHandler.END
         except:
             await query.edit_message_text("❌ Ошибка.")
             return ConversationHandler.END
-
+    
     elif len(parts) >= 5 and (data.startswith(f"{prefix}_prev") or data.startswith(f"{prefix}_next")):
         try:
             year = int(parts[3])
@@ -1150,7 +1130,7 @@ async def analytics_end_callback(update: Update, context: ContextTypes.DEFAULT_T
         except:
             await query.edit_message_text("❌ Ошибка.")
             return ConversationHandler.END
-
+    
     return ADMIN_ANALYTICS_END
 
 
@@ -1159,30 +1139,30 @@ async def month_select_callback(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data
     await query.answer()
     prefix = "month_select"
-
+    
     if data == f"{prefix}_cancel":
         await query.edit_message_text("❌ Просмотр записей отменён.")
         return ConversationHandler.END
-
+    
     parts = data.split('_')
-
+    
     if len(parts) >= 4 and parts[2] == "month":
         try:
             year = int(parts[3])
             month = int(parts[4])
-
+            
             rows = get_appointments_by_month(year, month)
-            month_names = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-                           "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
-
+            month_names = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", 
+                          "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
+            
             if not rows:
-                await query.edit_message_text(f"📭 За {month_names[month - 1]} {year} нет записей.")
+                await query.edit_message_text(f"📭 За {month_names[month-1]} {year} нет записей.")
             else:
-                month_text = f"📋 **ЗАПИСИ ЗА {month_names[month - 1]} {year}:**\n\n"
+                month_text = f"📋 **ЗАПИСИ ЗА {month_names[month-1]} {year}:**\n\n"
                 for row in rows:
                     app_id, user_id, username, service, date_str, start, end, phone, pet_name, breed, price, status, comment = row
                     formatted_date = format_date(date_str)
-
+                    
                     status_emoji = "⏳" if status == "pending" else "✅" if status == "confirmed" else "❌"
                     status_text = "ожидает" if status == "pending" else "подтверждена" if status == "confirmed" else "отменена"
                     month_text += f"{status_emoji} **#{app_id}**\n"
@@ -1198,11 +1178,11 @@ async def month_select_callback(update: Update, context: ContextTypes.DEFAULT_TY
                     month_text += f"   👤 @{username if username else 'нет'}\n\n"
                 await query.edit_message_text(month_text, parse_mode="Markdown")
             return ConversationHandler.END
-
+            
         except (IndexError, ValueError):
             await query.edit_message_text("❌ Ошибка при выборе месяца.")
             return ConversationHandler.END
-
+    
     elif len(parts) >= 4 and (data.startswith(f"{prefix}_prev_year") or data.startswith(f"{prefix}_next_year")):
         try:
             year = int(parts[3])
@@ -1216,7 +1196,7 @@ async def month_select_callback(update: Update, context: ContextTypes.DEFAULT_TY
         except:
             await query.edit_message_text("❌ Ошибка при перелистывании.")
             return ConversationHandler.END
-
+    
     return ADMIN_MONTH_SELECT
 
 
@@ -1224,7 +1204,7 @@ async def handle_confirm_reject(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     data = query.data
-
+    
     if data.startswith("confirm_"):
         app_id = int(data.split("_")[1])
         context.user_data["confirm_app_id"] = app_id
@@ -1233,17 +1213,16 @@ async def handle_confirm_reject(update: Update, context: ContextTypes.DEFAULT_TY
     elif data.startswith("reject_"):
         app_id = int(data.split("_")[1])
         app_info = get_appointment_by_id(app_id)
-
+        
         # Отклоняем запись (удаляем)
-        user_id, pet_name, slot_id, date_str, service, start_time, end_time, phone, comment = cancel_appointment_by_admin(
-            app_id)
-
+        user_id, pet_name, slot_id, date_str, service, start_time, end_time, phone, comment = cancel_appointment_by_admin(app_id)
+        
         await query.edit_message_text(f"❌ Запись #{app_id} отклонена.")
         if app_info:
             user_id = app_info[0]
             pet_name = app_info[4]
             await context.bot.send_message(user_id, f"❌ Запись для питомца {pet_name} была отклонена администратором.")
-
+    
     return ConversationHandler.END
 
 
@@ -1253,27 +1232,27 @@ async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await update.message.reply_text("❌ Введите число (цену в рублях).")
         return
-
+    
     app_id = context.user_data.get("confirm_app_id")
     if not app_id:
         await update.message.reply_text("❌ Ошибка.")
         return
-
+    
     confirm_appointment(app_id, price)
     app_info = get_appointment_by_id(app_id)
     if app_info:
         user_id, service, date_str, start, end, pet_name, breed, phone, price, status, comment = app_info
         formatted_date = format_date(date_str)
-
+        
         text = (f"✅ **ЗАПИСЬ ПОДТВЕРЖДЕНА!**\n\n"
                 f"🐕 Питомец: {pet_name} ({breed})\n"
                 f"✂️ Услуга: {service}\n")
         if comment:
             text += f"📝 Комментарий: {comment}\n"
         text += (f"📅 Дата: {formatted_date}\n"
-                 f"⏰ Время: {start} - {end}\n"
-                 f"💰 Стоимость: {price} руб.\n\n"
-                 f"Спасибо за доверие! Ждём вас! 🐾")
+                f"⏰ Время: {start} - {end}\n"
+                f"💰 Стоимость: {price} руб.\n\n"
+                f"Спасибо за доверие! Ждём вас! 🐾")
         await context.bot.send_message(user_id, text, parse_mode="Markdown")
     await update.message.reply_text(f"✅ Запись #{app_id} подтверждена на сумму {price} руб.!")
     context.user_data.pop("confirm_app_id", None)
@@ -1294,14 +1273,12 @@ async def send_reminders_async():
     tomorrow = date.today() + timedelta(days=1)
     conn = sqlite3.connect("grooming.db")
     cur = conn.cursor()
-    cur.execute(
-        "SELECT user_id, service, date, start_time, end_time, pet_name, breed, comment FROM appointments WHERE status='confirmed' AND date=?",
-        (tomorrow.isoformat(),))
+    cur.execute("SELECT user_id, service, date, start_time, end_time, pet_name, breed, comment FROM appointments WHERE status='confirmed' AND date=?", (tomorrow.isoformat(),))
     rows = cur.fetchall()
     conn.close()
     for user_id, service, date_str, start, end, pet_name, breed, comment in rows:
         formatted_date = format_date(date_str)
-
+        
         text = (f"🐾 **НАПОМИНАНИЕ!**\n\n"
                 f"Завтра {formatted_date} в {start} у вас запланирован груминг.\n\n"
                 f"🐕 Питомец: {pet_name} ({breed})\n"
@@ -1324,21 +1301,21 @@ def send_admin_morning_report_sync():
 async def send_admin_morning_report():
     from telegram import Bot
     bot = Bot(token=TOKEN)
-
+    
     today = date.today()
     rows = get_appointments_by_date(today)
     formatted_date = format_date(today.isoformat())
-
+    
     if not rows:
         text = f"📋 **ОТЧЁТ НА {formatted_date}**\n\n✅ Записей на сегодня нет."
     else:
         text = f"📋 **ОТЧЁТ НА {formatted_date}**\n\n"
         for row in rows:
             app_id, user_id, username, service, date_str, start, end, phone, pet_name, breed, price, status, comment = row
-
+            
             status_emoji = "⏳" if status == "pending" else "✅" if status == "confirmed" else "❌"
             status_text = "ожидает" if status == "pending" else "подтверждена" if status == "confirmed" else "отменена"
-
+            
             text += f"{status_emoji} **#{app_id}**\n"
             text += f"   🐕 {pet_name} ({breed})\n"
             text += f"   ⏰ {start} - {end}\n"
@@ -1350,7 +1327,7 @@ async def send_admin_morning_report():
             if status == "confirmed" and price > 0:
                 text += f"   💰 {price} руб.\n"
             text += f"   👤 @{username if username else 'нет'}\n\n"
-
+    
     for admin_id in ALL_ADMINS:
         try:
             await bot.send_message(chat_id=admin_id, text=text, parse_mode="Markdown")
@@ -1369,21 +1346,21 @@ def send_admin_evening_report_sync():
 async def send_admin_evening_report():
     from telegram import Bot
     bot = Bot(token=TOKEN)
-
+    
     tomorrow = date.today() + timedelta(days=1)
     rows = get_appointments_by_date(tomorrow)
     formatted_date = format_date(tomorrow.isoformat())
-
+    
     if not rows:
         text = f"📋 **ОТЧЁТ НА {formatted_date}**\n\n✅ Записей на завтра нет."
     else:
         text = f"📋 **ОТЧЁТ НА {formatted_date}**\n\n"
         for row in rows:
             app_id, user_id, username, service, date_str, start, end, phone, pet_name, breed, price, status, comment = row
-
+            
             status_emoji = "⏳" if status == "pending" else "✅" if status == "confirmed" else "❌"
             status_text = "ожидает" if status == "pending" else "подтверждена" if status == "confirmed" else "отменена"
-
+            
             text += f"{status_emoji} **#{app_id}**\n"
             text += f"   🐕 {pet_name} ({breed})\n"
             text += f"   ⏰ {start} - {end}\n"
@@ -1395,7 +1372,7 @@ async def send_admin_evening_report():
             if status == "confirmed" and price > 0:
                 text += f"   💰 {price} руб.\n"
             text += f"   👤 @{username if username else 'нет'}\n\n"
-
+    
     for admin_id in ALL_ADMINS:
         try:
             await bot.send_message(chat_id=admin_id, text=text, parse_mode="Markdown")
@@ -1406,7 +1383,7 @@ async def send_admin_evening_report():
 # ---------- ЗАПУСК ----------
 def main():
     application = Application.builder().token(TOKEN).build()
-
+    
     # Клиент
     client_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^✂️ Записаться$"), client_menu)],
@@ -1423,7 +1400,7 @@ def main():
         allow_reentry=True
     )
     application.add_handler(client_conv)
-
+    
     # Админ - добавление дат
     admin_add_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^➕ Добавить дату$"), admin_menu_handler)],
@@ -1435,7 +1412,7 @@ def main():
         allow_reentry=True
     )
     application.add_handler(admin_add_conv)
-
+    
     # Админ - аналитика
     admin_analytics_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^💰 Аналитика$"), admin_menu_handler)],
@@ -1447,7 +1424,7 @@ def main():
         allow_reentry=True
     )
     application.add_handler(admin_analytics_conv)
-
+    
     # Админ - просмотр записей за месяц
     admin_month_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^📆 Записи на месяц$"), admin_menu_handler)],
@@ -1458,22 +1435,21 @@ def main():
         allow_reentry=True
     )
     application.add_handler(admin_month_conv)
-
+    
     # Админ - отмена записи
     admin_cancel_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^❌ Отменить запись$"), admin_menu_handler)],
         states={
-            ADMIN_CANCEL_APPOINTMENT: [
-                CallbackQueryHandler(admin_cancel_callback, pattern="^(admin_cancel_|admin_cancel_back)")],
+            ADMIN_CANCEL_APPOINTMENT: [CallbackQueryHandler(admin_cancel_callback, pattern="^(admin_cancel_|admin_cancel_back)")],
         },
         fallbacks=[CommandHandler("start", start)],
         allow_reentry=True
     )
     application.add_handler(admin_cancel_conv)
-
+    
     # Обработчики админ-меню (без состояния)
     application.add_handler(MessageHandler(filters.Regex("^📅 Записи на неделю$"), admin_menu_handler))
-
+    
     # Остальные
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin", admin_panel))
@@ -1481,21 +1457,21 @@ def main():
     application.add_handler(MessageHandler(filters.Regex("^(📋 Мои записи|❌ Отменить запись|ℹ️ Помощь)$"), client_menu))
     application.add_handler(CallbackQueryHandler(cancel_appointment_callback, pattern="^cancel_"))
     application.add_handler(MessageHandler(filters.Regex(r"^\d+$") & ~filters.COMMAND, set_price))
-
+    
     # Планировщик
     scheduler = BackgroundScheduler()
-
+    
     # Напоминания клиентам в 10:00
     scheduler.add_job(send_reminders_sync, CronTrigger(hour=REMINDER_HOUR, minute=REMINDER_MINUTE))
-
+    
     # Утренний отчёт админу в 9:45
     scheduler.add_job(send_admin_morning_report_sync, CronTrigger(hour=9, minute=45))
-
+    
     # Вечерний отчёт админу в 22:00
     scheduler.add_job(send_admin_evening_report_sync, CronTrigger(hour=22, minute=0))
-
+    
     scheduler.start()
-
+    
     print("=" * 50)
     print("✅ БОТ ЗАПУЩЕН!")
     print("=" * 50)
